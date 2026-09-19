@@ -31,6 +31,28 @@ npm run lint       # ESLint
 npm run check      # 上記 3 つをまとめて実行
 ```
 
+## 公開する（GitHub Pages）
+
+サーバー機能を使っていないため、静的書き出しだけで公開できます。`main` に push すると
+`.github/workflows/deploy.yml` が走り、<https://isamutakiguchi.github.io/sumo/> に反映されます。
+
+初回だけ、リポジトリの **Settings → Pages → Source** を「GitHub Actions」に変更してください。
+マージ前に試したいときは Actions タブから `Deploy to GitHub Pages` を手動実行できます。
+
+手元で同じ成果物を確かめる:
+
+```bash
+NEXT_OUTPUT=export npm run build   # out/ に書き出される
+npx serve out                      # http://localhost:3000
+```
+
+（`NEXT_BASE_PATH` を付けて書き出した `out/` はそのパス直下に置かないと参照が合いません。
+手元で確認するときは省略してください。）
+
+`NEXT_OUTPUT=export` を付けないかぎり通常のサーバービルドのままなので、あとから
+`app/api/generate/route.ts`（外部 API 用）を足しても設定を戻す必要はありません。
+別のパス直下に置くなら `NEXT_BASE_PATH` を変え、ドメイン直下なら省略します。
+
 ## 仕組み
 
 生成は一方向のパイプラインです。
@@ -78,7 +100,7 @@ Track                <audio> で再生し、ダウンロードもできる
 
 生成バックエンドは `MusicProvider` インターフェース（`lib/providers/types.ts`）で差し替えられます。内蔵シンセが既定の実装で、`lib/providers/remote.ts` が外部 API 用の雛形です。
 
-Replicate の MusicGen や Suno API を使うなら:
+Replicate の MusicGen や Stable Audio などを使うなら:
 
 1. `app/api/generate/route.ts` を追加し、サーバー側で API を叩く（キーはサーバーの環境変数に置き、クライアントへは渡さない）
 2. `lib/providers/remote.ts` の `generate()` を実装する
