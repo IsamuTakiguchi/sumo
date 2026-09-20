@@ -40,7 +40,11 @@ jobs:
           # ここは内蔵シンセ専用の無料版。静的書き出しでは /api/music が存在しないので、
           # NEXT_PUBLIC_AI_PROVIDER_ENABLED は絶対に設定しないこと。
           # 設定すると UI に AI の選択肢が出て、選んでも 404 になる。
-          # AI 生成つきの版は Vercel 側にデプロイしている。
+          # AI 生成つきの版は Railway 側にデプロイしている。
+          # OGP 画像の URL を絶対パスにするために公開先を渡す。
+          # basePath（/sumo）は Next 側が付けるので、ここではオリジンだけ。
+          # 付けると og:image が /sumo/sumo/... と二重になる
+          NEXT_PUBLIC_SITE_URL: https://isamutakiguchi.github.io
 
       - uses: actions/upload-pages-artifact@v3
         with:

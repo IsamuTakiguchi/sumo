@@ -79,10 +79,30 @@ npm run dev
 このワークフローでは `NEXT_PUBLIC_AI_PROVIDER_ENABLED` を**設定しないでください**。
 設定すると UI に AI の選択肢が出て、選んでも 404 になります。
 
-### Vercel — AI 生成つきの版
+### Railway — AI 生成つきの版
 
-リポジトリをインポートするだけで動きます（設定ファイルは不要）。
-Settings → Environment Variables に上記 3 つを登録してください。
+リポジトリを繋ぐだけで動きます。Railway が Next.js を自動検出し、`npm run build` →
+`npm start` を実行します。**`railway.json` も `nixpacks.toml` も要りません。**
+
+1. **New Project → Deploy from GitHub repo** でこのリポジトリを選ぶ
+2. **Variables** に上記 3 つを登録する
+3. **Settings → Networking → Public Networking → Generate Domain** を押す
+
+3 番目を忘れやすいので注意してください。**Railway は既定で公開ドメインを作りません。**
+押すまでは「デプロイは成功しているのに開けない」状態になります。
+
+変数について 2 点:
+
+- 変数は**ビルド時にも渡ります**。`NEXT_PUBLIC_AI_PROVIDER_ENABLED` はビルド時に
+  コードへ埋め込まれるので、これで正しく効きます。ただし**あとから足した場合は
+  Deploy を押して反映**させてください（Railway では変数の変更が staged changes として溜まります）
+- `PORT` は登録不要です。Railway が自動で渡し、`next start` がそれを読みます。
+  `package.json` の start に `-p 3000` のような固定ポートを**足さないでください**。
+  固定すると「Application failed to respond」になります
+
+料金だけ注意: トライアルの $5 は 30 日で失効し、そのあとの Free プランは月 $1 ぶんの
+クレジットしかありません。実用するなら Hobby（$5/月）になります。常駐コンテナなので、
+曲を作っていない間も少しずつ消費します。
 
 手元で静的書き出しを確かめる:
 
@@ -164,6 +184,22 @@ Track                <audio> で再生し、ダウンロードもできる
 AI で作った曲はそうはいきません。**同じ指示でも毎回違う曲になり、作り直すたびに課金されます。**
 音声を捨てたら曲そのものが失われるので、こちらだけ実体を IndexedDB に残しています
 （`lib/storage/audioStore.ts`）。ライブラリから溢れた曲の音声は自動で掃除されます。
+
+## アイコン
+
+`design/icon/` に元の SVG を置いています。マークは 1 つの `path` で、用途ごとに違うのは
+「角丸を付けるか」と「余白をどれだけ取るか」だけです。
+
+| 用途 | ファイル | 元 |
+|---|---|---|
+| ブラウザのタブ | `app/icon.svg` | `design/icon/icon.svg`（角丸あり） |
+| iOS のホーム画面 | `app/apple-icon.png` 180px | `design/icon/apple.svg`（角丸なし。OS が付けるため） |
+| PWA | `public/icon-192.png` / `public/icon-512.png` | 512 は `maskable.svg`（端を切られても欠けない余白） |
+| SNS のリンクプレビュー | `app/opengraph-image.png` 1200×630 | `design/icon/mark.svg` ＋ 文字 |
+
+`NEXT_PUBLIC_SITE_URL` を設定した環境でだけリンクプレビューが出ます。
+**サブパスは入れずにオリジンだけ**を渡してください（`basePath` は Next が別途付けるため、
+入れると `og:image` が `/sumo/sumo/...` と二重になります）。
 
 ## 構成
 
