@@ -185,6 +185,22 @@ AI で作った曲はそうはいきません。**同じ指示でも毎回違う
 音声を捨てたら曲そのものが失われるので、こちらだけ実体を IndexedDB に残しています
 （`lib/storage/audioStore.ts`）。ライブラリから溢れた曲の音声は自動で掃除されます。
 
+## アイコン
+
+`design/icon/` に元の SVG を置いています。マークは 1 つの `path` で、用途ごとに違うのは
+「角丸を付けるか」と「余白をどれだけ取るか」だけです。
+
+| 用途 | ファイル | 元 |
+|---|---|---|
+| ブラウザのタブ | `app/icon.svg` | `design/icon/icon.svg`（角丸あり） |
+| iOS のホーム画面 | `app/apple-icon.png` 180px | `design/icon/apple.svg`（角丸なし。OS が付けるため） |
+| PWA | `public/icon-192.png` / `public/icon-512.png` | 512 は `maskable.svg`（端を切られても欠けない余白） |
+| SNS のリンクプレビュー | `app/opengraph-image.png` 1200×630 | `design/icon/mark.svg` ＋ 文字 |
+
+`NEXT_PUBLIC_SITE_URL` を設定した環境でだけリンクプレビューが出ます。
+**サブパスは入れずにオリジンだけ**を渡してください（`basePath` は Next が別途付けるため、
+入れると `og:image` が `/sumo/sumo/...` と二重になります）。
+
 ## 構成
 
 ```
