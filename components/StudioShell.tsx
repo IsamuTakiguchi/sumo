@@ -176,10 +176,18 @@ export function StudioShell() {
     [library],
   );
 
-  // 履歴から溢れた曲の音声が端末に残り続けないよう、リストに合わせて掃除する
+  /**
+   * 履歴から溢れた曲の音声が端末に残り続けないよう、リストに合わせて掃除する。
+   *
+   * 空のときは何もしない。localStorage は React の外にあり、最初の描画では
+   * サーバー用スナップショット（空配列）が返る。そこで掃除してしまうと、
+   * 保存済みの音声を起動直後に全部消すことになる。
+   * 個別削除は handleRemove が forgetTrack で消しているので、取りこぼさない。
+   */
   const libraryIds = library.tracks.map((t) => t.id).join(',');
   useEffect(() => {
-    void pruneAudioTo(libraryIds ? libraryIds.split(',') : []);
+    if (!libraryIds) return;
+    void pruneAudioTo(libraryIds.split(','));
   }, [libraryIds]);
 
   const busy = generator.isGenerating;
