@@ -14,9 +14,15 @@ export function AudioPlayer({
   onRegenerateSameSeed,
 }: {
   track: Track;
-  onRegenerateSameSeed: () => void;
+  /** シードで再現できない曲（外部 AI）では null。ボタンごと出さない */
+  onRegenerateSameSeed: (() => void) | null;
 }) {
   const player = useAudioPlayer(track.url, track.durationSec);
+
+  // 内蔵シンセは WAV、外部 AI は MP3。中身と拡張子を食い違わせない
+  const fileExt = track.blob.type.includes('mpeg') ? 'mp3' : 'wav';
+  const suffix = track.spec ? `_${formatSeed(track.spec.seed)}` : '';
+  const fileName = `sumo_${slugify(track.title)}${suffix}.${fileExt}`;
 
   return (
     <div className="space-y-4">
@@ -79,30 +85,27 @@ export function AudioPlayer({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          {onRegenerateSameSeed && (
+            <IconButton
+              label="同じシードで作り直す"
+              onClick={onRegenerateSameSeed}
+              className="h-9 gap-1.5 px-3 text-xs"
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                <path d="M8 3V1L5 3.5 8 6V4a4 4 0 1 1-4 4H2.5A5.5 5.5 0 1 0 8 3Z" />
+              </svg>
+              再生成
+            </IconButton>
+          )}
           <IconButton
-            label="同じシードで作り直す"
-            onClick={onRegenerateSameSeed}
-            className="h-9 gap-1.5 px-3 text-xs"
-          >
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
-              <path d="M8 3V1L5 3.5 8 6V4a4 4 0 1 1-4 4H2.5A5.5 5.5 0 1 0 8 3Z" />
-            </svg>
-            再生成
-          </IconButton>
-          <IconButton
-            label="WAV をダウンロード"
-            onClick={() =>
-              downloadBlob(
-                track.blob,
-                `sumo_${slugify(track.title)}_${formatSeed(track.spec.seed)}.wav`,
-              )
-            }
+            label={`${fileExt.toUpperCase()} をダウンロード`}
+            onClick={() => downloadBlob(track.blob, fileName)}
             className="h-9 gap-1.5 px-3 text-xs"
           >
             <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
               <path d="M8 1.5a.75.75 0 0 1 .75.75v6.19l2.22-2.22a.75.75 0 1 1 1.06 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0l-3.5-3.5a.75.75 0 0 1 1.06-1.06l2.22 2.22V2.25A.75.75 0 0 1 8 1.5ZM2.5 12a.75.75 0 0 1 .75.75v.75h9.5v-.75a.75.75 0 0 1 1.5 0v1.5a.75.75 0 0 1-.75.75h-11a.75.75 0 0 1-.75-.75v-1.5A.75.75 0 0 1 2.5 12Z" />
             </svg>
-            WAV
+            {fileExt.toUpperCase()}
           </IconButton>
         </div>
       </div>

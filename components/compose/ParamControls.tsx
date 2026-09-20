@@ -22,6 +22,8 @@ export interface ParamValues {
   durationSec: number;
   key: { root: PitchClass; scale: ScaleId } | null;
   vocal: 'instrumental' | 'lyrics';
+  /** 歌わせたい歌詞。空ならプロバイダ側で自動生成する */
+  lyrics: string;
 }
 
 export function ParamControls({
@@ -29,11 +31,14 @@ export function ParamControls({
   onChange,
   tempoRange,
   disabled,
+  /** 選択中のプロバイダが実際に歌えるか。文言が変わる */
+  canSing = false,
 }: {
   values: ParamValues;
   onChange: (v: Partial<ParamValues>) => void;
   tempoRange: [number, number];
   disabled?: boolean;
+  canSing?: boolean;
 }) {
   const autoTempo = values.tempo === null;
   const autoKey = values.key === null;
@@ -153,9 +158,26 @@ export function ParamControls({
           ]}
         />
         {values.vocal === 'lyrics' && (
-          <p className="mt-1.5 text-[11px] leading-snug text-ink-400">
-            ※ 歌詞はテキストとして生成されます。歌声の合成は行いません。
-          </p>
+          <div className="mt-2 space-y-1.5">
+            <textarea
+              id="lyrics-input"
+              value={values.lyrics}
+              onChange={(e) => onChange({ lyrics: e.target.value })}
+              disabled={disabled}
+              rows={5}
+              placeholder={
+                canSing
+                  ? '歌わせたい歌詞。空行で区切るとセクションごとに割り当てます。\n空欄のままなら AI におまかせします。'
+                  : '歌詞を書くとそのまま使います。空欄なら自動生成します。'
+              }
+              className="w-full resize-y rounded-lg border border-ink-700 bg-ink-850 px-3 py-2 text-xs leading-relaxed text-ink-100 placeholder:text-ink-600 focus:border-accent-500 focus:outline-none disabled:opacity-50"
+            />
+            <p className="text-[11px] leading-snug text-ink-400">
+              {canSing
+                ? '※ この歌詞を AI が実際に歌います。'
+                : '※ 内蔵シンセでは歌詞はテキストのみで、歌声の合成は行いません。'}
+            </p>
+          </div>
         )}
       </div>
     </div>

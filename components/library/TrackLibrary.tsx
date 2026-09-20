@@ -64,12 +64,15 @@ export function TrackLibrary({
                   )}
                 </div>
                 <div className="mt-0.5 truncate text-[11px] text-ink-400">
-                  {GENRE_PRESETS[t.spec.genre].labelJa} · {t.spec.tempo} BPM ·{' '}
+                  {GENRE_PRESETS[t.spec?.genre ?? t.request.genre].labelJa}
+                  {t.spec ? ` · ${t.spec.tempo} BPM` : ' · AI 生成'} ·{' '}
                   {formatTime(t.durationSec)} · {formatDate(t.createdAt)}
                 </div>
-                <div className="mt-0.5 font-mono text-[10px] tracking-wider text-ink-600">
-                  #{formatSeed(t.spec.seed)}
-                </div>
+                {t.spec && (
+                  <div className="mt-0.5 font-mono text-[10px] tracking-wider text-ink-600">
+                    #{formatSeed(t.spec.seed)}
+                  </div>
+                )}
               </button>
               <button
                 type="button"

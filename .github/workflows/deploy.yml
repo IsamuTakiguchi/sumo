@@ -37,6 +37,10 @@ jobs:
           NEXT_OUTPUT: export
           # https://<user>.github.io/sumo/ で公開するため、サブパスを付ける
           NEXT_BASE_PATH: /sumo
+          # ここは内蔵シンセ専用の無料版。静的書き出しでは /api/music が存在しないので、
+          # NEXT_PUBLIC_AI_PROVIDER_ENABLED は絶対に設定しないこと。
+          # 設定すると UI に AI の選択肢が出て、選んでも 404 になる。
+          # AI 生成つきの版は Vercel 側にデプロイしている。
 
       - uses: actions/upload-pages-artifact@v3
         with:

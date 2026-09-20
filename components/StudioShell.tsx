@@ -1,14 +1,16 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { GenerationRequest, GenreId, MoodId, Track, TrackMeta, VoiceId } from '@/lib/types';
 import { GENRE_PRESETS } from '@/lib/music/genres';
 import { INSTRUMENT_TAGS, MOODS } from '@/lib/music/moods';
 import { analyzePrompt } from '@/lib/music/prompt';
-import { LOCAL_SYNTH_ID } from '@/lib/providers';
-import { getCachedTrack, release } from '@/lib/storage/audioCache';
+import { getProvider, LOCAL_SYNTH_ID } from '@/lib/providers';
+import { readPassphrase, writePassphrase } from '@/lib/providers/passphrase';
+import { forgetTrack, getCachedTrack, pruneAudioTo } from '@/lib/storage/audioCache';
 import { useGenerator } from '@/lib/hooks/useGenerator';
 import { useLibrary } from '@/lib/hooks/useLibrary';
+import { useProviders } from '@/lib/hooks/useProviders';
 
 import { Panel, FieldLabel } from '@/components/ui/primitives';
 import { PromptComposer } from '@/components/compose/PromptComposer';
@@ -16,6 +18,8 @@ import { GenreGrid } from '@/components/compose/GenreGrid';
 import { TagChips } from '@/components/compose/TagChips';
 import { ParamControls, type ParamValues } from '@/components/compose/ParamControls';
 import { SeedField } from '@/components/compose/SeedField';
+import { ProviderPicker } from '@/components/compose/ProviderPicker';
+import { PassphraseField } from '@/components/compose/PassphraseField';
 import { GenerateBar } from '@/components/compose/GenerateBar';
 import { AudioPlayer } from '@/components/player/AudioPlayer';
 import { LyricsView } from '@/components/player/LyricsView';
@@ -47,17 +51,31 @@ export function StudioShell() {
     durationSec: 60,
     key: null,
     vocal: 'instrumental',
+    lyrics: '',
   });
 
+  const [providerId, setProviderId] = useState(LOCAL_SYNTH_ID);
+  // 合い言葉の欄は AI を選んだあとにしか出ないので、初期値の読み出しで
+  // ハイドレーションがずれることはない
+  const [passphrase, setPassphrase] = useState(readPassphrase);
   const [current, setCurrent] = useState<Track | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [missingAudio, setMissingAudio] = useState<TrackMeta | null>(null);
 
   const library = useLibrary();
   const generator = useGenerator();
 
+  const providers = useProviders();
+
+  const provider = useMemo(() => getProvider(providerId), [providerId]);
+  const needsPassphrase = !provider.supportsSeed;
+
   const preset = GENRE_PRESETS[genre];
   const hints = useMemo(() => analyzePrompt(prompt), [prompt]);
-  const estimateSec = Math.max(2, Math.round(params.durationSec / 20));
+  // 内蔵シンセは実測で尺の 1/20 ほど。外部 AI はモデル側の待ち時間が支配的
+  const estimateSec = provider.id === LOCAL_SYNTH_ID
+    ? Math.max(2, Math.round(params.durationSec / 20))
+    : 60;
 
   const buildRequest = useCallback(
     (overrides: Partial<GenerationRequest> = {}): GenerationRequest => ({
@@ -69,12 +87,12 @@ export function StudioShell() {
       durationSec: params.durationSec,
       key: params.key,
       vocal: params.vocal,
-      lyrics: null,
+      lyrics: params.vocal === 'lyrics' && params.lyrics.trim() ? params.lyrics : null,
       seed,
-      providerId: LOCAL_SYNTH_ID,
+      providerId,
       ...overrides,
     }),
-    [prompt, genre, moods, instruments, params, seed],
+    [prompt, genre, moods, instruments, params, seed, providerId],
   );
 
   const runGeneration = useCallback(
@@ -82,7 +100,7 @@ export function StudioShell() {
       const track = await generator.generate(req);
       if (!track) return;
       setCurrent(track);
-      setSeed(track.spec.seed);
+      if (track.spec) setSeed(track.spec.seed);
       library.add(toMeta(track));
     },
     [generator, library],
@@ -93,26 +111,15 @@ export function StudioShell() {
   }, [buildRequest, runGeneration]);
 
   const handleRegenerateSameSeed = useCallback(() => {
-    if (!current) return;
+    if (!current?.spec) return;
     void runGeneration({ ...current.request, seed: current.spec.seed });
   }, [current, runGeneration]);
 
-  /**
-   * ライブラリから曲を開く。
-   * 音声は保存していないので、キャッシュに無ければシードから作り直す。
-   * 決定性があるので、いつ作り直してもまったく同じ音になる。
-   */
-  const handleSelect = useCallback(
+  /** ライブラリの曲を、id とタイトルを引き継いだまま作り直す */
+  const regenerateAs = useCallback(
     async (meta: TrackMeta) => {
-      const cached = getCachedTrack(meta.id);
-      if (cached) {
-        setCurrent(cached);
-        setSeed(cached.spec.seed);
-        return;
-      }
       setLoadingId(meta.id);
       try {
-        // ライブラリ上の同じ曲として扱いたいので、id とタイトルを引き継いで生成する
         const track = await generator.generate(meta.request, {
           id: meta.id,
           title: meta.title,
@@ -120,7 +127,7 @@ export function StudioShell() {
         });
         if (!track) return;
         setCurrent(track);
-        setSeed(track.spec.seed);
+        if (track.spec) setSeed(track.spec.seed);
       } finally {
         setLoadingId(null);
       }
@@ -128,14 +135,52 @@ export function StudioShell() {
     [generator],
   );
 
+  /**
+   * ライブラリから曲を開く。
+   *
+   * 内蔵シンセの曲は音声を保存していないが、シードから作り直せば波形まで同じ音になる。
+   * 外部 AI の曲はそうはいかない。作り直すと**別の曲**になり、そのたびに課金もされる。
+   * だから保存してある音声を探し、見つからなければ黙って作り直さず確認を挟む。
+   */
+  const handleSelect = useCallback(
+    async (meta: TrackMeta) => {
+      setMissingAudio(null);
+      setLoadingId(meta.id);
+      try {
+        const stored = await getCachedTrack(meta.id);
+        if (stored) {
+          setCurrent(stored);
+          if (stored.spec) setSeed(stored.spec.seed);
+          return;
+        }
+        const from = getProvider(meta.providerId);
+        if (!from.supportsSeed) {
+          setMissingAudio(meta);
+          return;
+        }
+      } finally {
+        setLoadingId(null);
+      }
+      await regenerateAs(meta);
+    },
+    [regenerateAs],
+  );
+
   const handleRemove = useCallback(
     (id: string) => {
-      release(id);
+      void forgetTrack(id);
       library.remove(id);
+      setMissingAudio((prev) => (prev?.id === id ? null : prev));
       setCurrent((prev) => (prev?.id === id ? null : prev));
     },
     [library],
   );
+
+  // 履歴から溢れた曲の音声が端末に残り続けないよう、リストに合わせて掃除する
+  const libraryIds = library.tracks.map((t) => t.id).join(',');
+  useEffect(() => {
+    void pruneAudioTo(libraryIds ? libraryIds.split(',') : []);
+  }, [libraryIds]);
 
   const busy = generator.isGenerating;
 
@@ -147,11 +192,15 @@ export function StudioShell() {
             sumo
           </h1>
           <p className="mt-1 text-xs text-ink-400">
-            プロンプトから楽曲を生成する AI 音楽スタジオ。ブラウザの中だけで動きます。
+            {provider.id === LOCAL_SYNTH_ID
+              ? 'プロンプトから楽曲を生成する AI 音楽スタジオ。ブラウザの中だけで動きます。'
+              : 'プロンプトから楽曲を生成する AI 音楽スタジオ。歌声つきの曲も作れます。'}
           </p>
         </div>
         <span className="rounded-full border border-ink-700 px-3 py-1 text-[11px] text-ink-400">
-          内蔵シンセ · オフライン生成
+          {provider.id === LOCAL_SYNTH_ID
+            ? '内蔵シンセ · オフライン生成'
+            : 'ElevenLabs Music · 約 $0.15/分'}
         </span>
       </header>
 
@@ -207,13 +256,33 @@ export function StudioShell() {
 
           <Panel title="詳細設定">
             <div className="space-y-4">
+              <ProviderPicker
+                providers={providers}
+                value={providerId}
+                onChange={setProviderId}
+                disabled={busy}
+              />
+              {needsPassphrase && (
+                <PassphraseField
+                  value={passphrase}
+                  onChange={(v) => {
+                    setPassphrase(v);
+                    writePassphrase(v);
+                  }}
+                  invalid={generator.needsPassphrase}
+                  disabled={busy}
+                />
+              )}
               <ParamControls
                 values={params}
                 onChange={(v) => setParams((p) => ({ ...p, ...v }))}
                 tempoRange={preset.tempo}
                 disabled={busy}
+                canSing={!provider.supportsSeed}
               />
-              <SeedField seed={seed} onChange={setSeed} disabled={busy} />
+              {provider.supportsSeed && (
+                <SeedField seed={seed} onChange={setSeed} disabled={busy} />
+              )}
             </div>
           </Panel>
 
@@ -229,6 +298,37 @@ export function StudioShell() {
               {generator.error}
             </p>
           )}
+
+          {missingAudio && (
+            <div className="rounded-lg border border-glow-500/40 bg-glow-500/10 px-3 py-2.5 text-xs leading-relaxed text-glow-400">
+              <p>
+                「{missingAudio.title}」の音声がこの端末に残っていません。AI で作った曲は
+                作り直しても<strong className="font-semibold">同じ音にはならず</strong>、
+                あらたに料金がかかります。
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    const meta = missingAudio;
+                    setMissingAudio(null);
+                    void regenerateAs(meta);
+                  }}
+                  className="rounded border border-glow-500/60 px-2.5 py-1 text-[11px] hover:bg-glow-500/10 disabled:opacity-50"
+                >
+                  別の曲として作り直す
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMissingAudio(null)}
+                  className="rounded border border-ink-700 px-2.5 py-1 text-[11px] text-ink-300 hover:border-ink-600"
+                >
+                  やめる
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ------------------------------ 再生 */}
@@ -239,7 +339,7 @@ export function StudioShell() {
               <AudioPlayer
                 key={current.id}
                 track={current}
-                onRegenerateSameSeed={handleRegenerateSameSeed}
+                onRegenerateSameSeed={current.spec ? handleRegenerateSameSeed : null}
               />
             ) : (
               <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 text-center">
@@ -268,13 +368,15 @@ export function StudioShell() {
           {current?.lyrics && (
             <Panel title="歌詞">
               <LyricsView lyrics={current.lyrics} />
-              <p className="mt-3 border-t border-ink-700/60 pt-2 text-[11px] text-ink-400">
-                ※ 歌詞はテキストのみの生成です。歌声は合成していません。
-              </p>
+              {current.providerId === LOCAL_SYNTH_ID && (
+                <p className="mt-3 border-t border-ink-700/60 pt-2 text-[11px] text-ink-400">
+                  ※ 内蔵シンセでは歌詞はテキストのみの生成です。歌声は合成していません。
+                </p>
+              )}
             </Panel>
           )}
 
-          {current && (
+          {current && current.sections.length > 0 && (
             <Panel title="構成">
               <div className="flex flex-wrap gap-1.5 text-[11px]">
                 {current.sections.map((s, i) => (
@@ -313,8 +415,9 @@ export function StudioShell() {
             />
             {library.tracks.length > 0 && (
               <p className="mt-3 border-t border-ink-700/60 pt-2 text-[11px] leading-relaxed text-ink-400">
-                音声ではなく生成条件を保存しています。開くときにシードから作り直すので、
-                いつでも同じ音が鳴ります。
+                内蔵シンセの曲は生成条件だけを保存し、開くときにシードから作り直します
+                （いつでも同じ音）。AI で作った曲は作り直せないので、音声そのものを
+                この端末に保存しています。
               </p>
             )}
           </Panel>
