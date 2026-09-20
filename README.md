@@ -79,10 +79,30 @@ npm run dev
 このワークフローでは `NEXT_PUBLIC_AI_PROVIDER_ENABLED` を**設定しないでください**。
 設定すると UI に AI の選択肢が出て、選んでも 404 になります。
 
-### Vercel — AI 生成つきの版
+### Railway — AI 生成つきの版
 
-リポジトリをインポートするだけで動きます（設定ファイルは不要）。
-Settings → Environment Variables に上記 3 つを登録してください。
+リポジトリを繋ぐだけで動きます。Railway が Next.js を自動検出し、`npm run build` →
+`npm start` を実行します。**`railway.json` も `nixpacks.toml` も要りません。**
+
+1. **New Project → Deploy from GitHub repo** でこのリポジトリを選ぶ
+2. **Variables** に上記 3 つを登録する
+3. **Settings → Networking → Public Networking → Generate Domain** を押す
+
+3 番目を忘れやすいので注意してください。**Railway は既定で公開ドメインを作りません。**
+押すまでは「デプロイは成功しているのに開けない」状態になります。
+
+変数について 2 点:
+
+- 変数は**ビルド時にも渡ります**。`NEXT_PUBLIC_AI_PROVIDER_ENABLED` はビルド時に
+  コードへ埋め込まれるので、これで正しく効きます。ただし**あとから足した場合は
+  Deploy を押して反映**させてください（Railway では変数の変更が staged changes として溜まります）
+- `PORT` は登録不要です。Railway が自動で渡し、`next start` がそれを読みます。
+  `package.json` の start に `-p 3000` のような固定ポートを**足さないでください**。
+  固定すると「Application failed to respond」になります
+
+料金だけ注意: トライアルの $5 は 30 日で失効し、そのあとの Free プランは月 $1 ぶんの
+クレジットしかありません。実用するなら Hobby（$5/月）になります。常駐コンテナなので、
+曲を作っていない間も少しずつ消費します。
 
 手元で静的書き出しを確かめる:
 
