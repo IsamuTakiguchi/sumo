@@ -7,7 +7,8 @@
  *     → ドラム以外はサイドチェインのダッキングを通してマスターへ
  *     ↘ リバーブ送り（モノラル）┐
  *     ↘ ディレイ送り（モノラル）┘→ ステレオで戻してマスターへ
- *   マスター → HPF/LPF → ドライブ → コンプレッサー → ゲイン → 正規化
+ *   マスター → HPF/LPF → ドライブ → 直流カット → コンプレッサー
+ *            → 音量合わせ（RMS）→ リミッタ → ピーク上限
  *
  * バスは `${role}:${voice}` 単位なので、ドライブやコーラスをバスで掛けても
  * 音符ごとに掛けるのとほぼ同じ音になり、処理量だけが大幅に減る。
@@ -24,11 +25,11 @@ import {
   applyCompressor,
   applyDelay,
   applyDrive,
-  applyGain,
   applyOnePoleHighpass,
   applyOnePoleLowpass,
+  applyPeakCeiling,
   applyReverb,
-  normalizeStereo,
+  normalizeLoudness,
 } from './effects';
 import { VOICES, type VoiceContext } from './voices';
 
@@ -37,6 +38,12 @@ export interface RenderOptions {
   /** 0..1 */
   onProgress?: (ratio: number) => void;
   signal?: AbortSignal;
+  /**
+   * マスター段（EQ・ドライブ・コンプ・音量合わせ）を通さずに返す。
+   * パートごとの寄与を測るときに使う。音量合わせが掛かると、
+   * どのパートを抜き出しても同じ音量に揃ってしまい比較にならないため。
+   */
+  skipMaster?: boolean;
 }
 
 function yieldToMain(): Promise<void> {
@@ -95,16 +102,33 @@ export async function renderArrangement(
   options.onProgress?.(0.93);
   await yieldToMain();
 
+  if (options.skipMaster) {
+    options.onProgress?.(1);
+    return master;
+  }
+
   if (preset.master.highpass) applyOnePoleHighpass(master, preset.master.highpass);
   if (preset.master.lowpass) applyOnePoleLowpass(master, preset.master.lowpass);
   if (preset.master.drive) applyDrive(master, preset.master.drive);
-  // 掛けすぎるとセクションごとの抑揚まで潰れるので、軽めに留める
-  applyCompressor(master, 0.5, 2.5, 0.006, 0.18);
-  // ドライブは左右非対称な波形（キックなど）から直流成分を生むので、最後に必ず落とす。
-  // 残したままだとヘッドルームを無駄に食い、再生機によってはノイズの原因になる。
+
+  // ドライブは左右非対称な波形（キックなど）から直流成分を生むので、その直後に落とす。
+  // コンプより前に置くのが要点で、直流が残ったままだと検出器が「大きい信号」と誤認し、
+  // 低音由来のゲインリダクションが増えてしまう。
   applyOnePoleHighpass(master, 18);
-  applyGain(master, 1.2);
-  normalizeStereo(master, 0.89);
+
+  // 検出側に 140Hz のハイパスを入れる（サイドチェイン HPF）。
+  // これが無いとコンプはキックとベースのピークにしか反応せず、
+  // 低音が鳴るたびに曲全体が沈んで旋律が周期的に埋もれる。
+  // リリースも短くして、キック 1 発ごとのポンピングを残さない。
+  applyCompressor(master, 0.6, 2, 0.01, 0.08, 140);
+
+  // 体感音量（RMS）で揃える。ピーク基準だと、キックとベースが重なった一瞬が
+  // 曲全体の音量を決めてしまい、ベースを下げない限り他のパートが大きくならない。
+  normalizeLoudness(master, 0.16);
+  // RMS で合わせたぶん飛び出すピークを受け止める
+  applyCompressor(master, 0.85, 12, 0.002, 0.05);
+  // ここでピークに合わせて上げ直すと音量合わせが台無しになるので、超過分を下げるだけ
+  applyPeakCeiling(master, 0.95);
 
   options.onProgress?.(1);
   return master;

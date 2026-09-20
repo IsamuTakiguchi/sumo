@@ -42,7 +42,7 @@ export function generateBass(
 
     const root = toBassRegister(chord.root);
     const nextRoot = next ? toBassRegister(next.root) : root;
-    const vel = 0.5 + section.energy * 0.5;
+    const vel = 0.34 + section.energy * 0.52;
 
     switch (preset.bassStyle) {
       case 'root':
