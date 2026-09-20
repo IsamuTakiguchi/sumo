@@ -171,10 +171,18 @@ export function applyChorus(buf: StereoBuffer, depth: number): void {
   }
 }
 
-/** ソフトクリップによる飽和。音に密度と暖かさを足す */
+/**
+ * ソフトクリップによる飽和。音に密度と暖かさを足す。
+ *
+ * 小信号でのゲインは 1 に保つ（`tanh(k·x)/k` の傾きは原点で 1）。
+ * 以前は `tanh(k·x)/tanh(k)` で正規化していたが、これは小信号を k/tanh(k) 倍
+ * ＝ amount 0.25 で 2.5 倍も持ち上げる「隠れたゲイン段」になっていた。
+ * ベースのチャンネルにだけ掛かっていたため、ミックスを数値で組み立てられなくなっていた。
+ * ここが音量を変えないので、音量はすべてバスのゲインで決まる。
+ */
 export function applyDrive(buf: StereoBuffer, amount: number): void {
   const k = 1 + amount * 6;
-  const comp = 1 / Math.tanh(k);
+  const comp = 1 / k;
   for (let i = 0; i < buf.length; i++) {
     buf.left[i] = softClip(buf.left[i], k) * comp;
     buf.right[i] = softClip(buf.right[i], k) * comp;
@@ -202,6 +210,10 @@ export function applyOnePoleHighpass(buf: StereoBuffer, cutoff: number): void {
 /**
  * 素朴なピーク検出型コンプレッサー。
  * 曲ごとの音量差を均し、全体の密度を上げる。
+ *
+ * `detectorHighpass` を指定すると、検出側だけにハイパスを掛ける（サイドチェイン HPF）。
+ * これが無いと検出器はキックとベースのピークしか見ず、低音が鳴るたびに曲全体が沈んで
+ * 旋律が周期的に埋もれる。掛かる音は素通しで、何を「大きい」と見なすかだけが変わる。
  */
 export function applyCompressor(
   buf: StereoBuffer,
@@ -209,14 +221,19 @@ export function applyCompressor(
   ratio: number,
   attackSec: number,
   releaseSec: number,
+  detectorHighpass = 0,
 ): void {
   const sr = buf.sampleRate;
   const attack = Math.exp(-1 / Math.max(1, attackSec * sr));
   const release = Math.exp(-1 / Math.max(1, releaseSec * sr));
+  const hpL = detectorHighpass > 0 ? new OnePoleHigh(detectorHighpass, sr) : null;
+  const hpR = detectorHighpass > 0 ? new OnePoleHigh(detectorHighpass, sr) : null;
   let env = 0;
 
   for (let i = 0; i < buf.length; i++) {
-    const level = Math.max(Math.abs(buf.left[i]), Math.abs(buf.right[i]));
+    const dl = hpL ? hpL.process(buf.left[i]) : buf.left[i];
+    const dr = hpR ? hpR.process(buf.right[i]) : buf.right[i];
+    const level = Math.max(Math.abs(dl), Math.abs(dr));
     const coef = level > env ? attack : release;
     env = level + (env - level) * coef;
 
@@ -237,11 +254,27 @@ export function applyGain(buf: StereoBuffer, gain: number): void {
 }
 
 /**
- * ピークを目標値に合わせる。
- * 下げるだけでなく持ち上げもするので、静かなジャンルでも音量が揃う。
- * ほぼ無音のときにノイズだけを増幅しないよう、持ち上げ量には上限を設ける。
+ * 平均音量（RMS）を目標値に合わせる。
+ *
+ * ピーク基準で揃えると、キックとベースが重なった一瞬のピークが曲全体の音量を決めてしまい、
+ * ベースを下げない限り他のパートが大きくならない。体感音量に近い RMS で合わせることで、
+ * 低音の一発に音量を独占されなくなる。はみ出したピークは後段のリミッタが受ける。
  */
-export function normalizeStereo(buf: StereoBuffer, target: number): void {
+export function normalizeLoudness(buf: StereoBuffer, targetRms: number, maxGain = 6): void {
+  let sum = 0;
+  for (let i = 0; i < buf.length; i++) {
+    sum += buf.left[i] * buf.left[i] + buf.right[i] * buf.right[i];
+  }
+  const rms = Math.sqrt(sum / Math.max(1, buf.length * 2));
+  if (rms < 1e-5) return;
+  applyGain(buf, Math.min(maxGain, targetRms / rms));
+}
+
+/**
+ * ピークが上限を超えていたときだけ下げる（持ち上げはしない）。
+ * `normalizeLoudness` で揃えた音量を壊さずに、クリップだけを防ぐための最終段。
+ */
+export function applyPeakCeiling(buf: StereoBuffer, ceiling: number): void {
   let peak = 0;
   for (let i = 0; i < buf.length; i++) {
     const l = Math.abs(buf.left[i]);
@@ -249,6 +282,6 @@ export function normalizeStereo(buf: StereoBuffer, target: number): void {
     if (l > peak) peak = l;
     if (r > peak) peak = r;
   }
-  if (peak < 1e-4) return;
-  applyGain(buf, Math.min(8, target / peak));
+  if (peak > ceiling) applyGain(buf, ceiling / peak);
 }
+

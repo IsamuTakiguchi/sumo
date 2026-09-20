@@ -178,27 +178,41 @@ function extraPartFor(voice: VoiceId): PartConfig {
 }
 
 /**
- * ドラム各音の基本ミックス設定（ジャンルのリバーブ量で微調整される）。
- * drive はそのチャンネル全体に掛かる飽和量。
+ * ドラム各音の基本ミックス設定。ジャンルごとの `preset.mix.drums` で全体を上下させる。
+ * drive はそのチャンネル全体に掛かる飽和量（音量は変えず波形だけ丸める）。
+ *
+ * 打楽器の音色は vel=1 でピーク 1.0 に揃えてあるので（lib/audio/voices.ts の LEVEL）、
+ * ここの gain がそのままキットの中のバランスになる。
  */
 const DRUM_MIX: Record<string, { gain: number; pan: number; reverb: number; drive?: number }> = {
-  kick: { gain: 0.8, pan: 0, reverb: 0.04, drive: 0.25 },
-  snare: { gain: 0.66, pan: 0, reverb: 0.3 },
-  clap: { gain: 0.58, pan: 0, reverb: 0.34 },
-  hatClosed: { gain: 0.42, pan: 0.18, reverb: 0.1 },
-  hatOpen: { gain: 0.36, pan: 0.2, reverb: 0.22 },
-  tom: { gain: 0.5, pan: -0.15, reverb: 0.28 },
-  ride: { gain: 0.4, pan: 0.22, reverb: 0.24 },
+  kick: { gain: 0.55, pan: 0, reverb: 0.04, drive: 0.25 },
+  snare: { gain: 0.34, pan: 0, reverb: 0.3 },
+  clap: { gain: 0.32, pan: 0, reverb: 0.34 },
+  hatClosed: { gain: 0.17, pan: 0.18, reverb: 0.1 },
+  hatOpen: { gain: 0.16, pan: 0.2, reverb: 0.22 },
+  tom: { gain: 0.3, pan: -0.15, reverb: 0.28 },
+  ride: { gain: 0.18, pan: 0.22, reverb: 0.24 },
 };
 
-/** 音色ごとの、チャンネル単位で掛けるエフェクト量 */
+/**
+ * 音色ごとの、チャンネル単位で掛けるエフェクト量。
+ * ベースの drive はジャンルごとに変えたいので `preset.mix.bassDrive` に移した。
+ */
 const VOICE_FX: Partial<Record<VoiceId, { drive?: number; chorus?: number }>> = {
   guitar: { drive: 0.6 },
-  bass: { drive: 0.25 },
-  sub808: { drive: 0.1 },
   pad: { chorus: 1 },
   strings: { chorus: 0.6 },
 };
+
+/**
+ * センド量の全体スケール。
+ *
+ * 以前は `part.reverbSend * (0.5 + preset.reverb.mix)` のように下駄を履かせていたため、
+ * プリセットで 0.06〜0.60（10 倍）振ったリバーブ量が実効 1.67 倍まで圧縮され、
+ * ジャンルごとの空間の違いがほとんど出ていなかった。素直な掛け算に戻し、
+ * 全体量だけをここで合わせる。
+ */
+const SEND_SCALE = 2;
 
 /** 楽譜に出てくる音色から、ミキサーのチャンネル一覧を組み立てる */
 function buildBuses(
@@ -217,8 +231,8 @@ function buildBuses(
       voice: part.voice,
       gain: part.gain,
       pan: part.pan,
-      reverbSend: part.reverbSend * (0.5 + preset.reverb.mix),
-      delaySend: part.delaySend * (0.5 + preset.delay.mix),
+      reverbSend: part.reverbSend * preset.reverb.mix * SEND_SCALE,
+      delaySend: part.delaySend * preset.delay.mix * SEND_SCALE,
       ...VOICE_FX[part.voice],
     });
   }
@@ -233,9 +247,9 @@ function buildBuses(
         key,
         role: 'drums',
         voice: ev.voice,
-        gain: mix.gain,
+        gain: mix.gain * preset.mix.drums,
         pan: mix.pan,
-        reverbSend: mix.reverb * preset.reverb.mix,
+        reverbSend: mix.reverb * preset.reverb.mix * SEND_SCALE,
         delaySend: 0,
         drive: mix.drive,
       });
@@ -244,11 +258,12 @@ function buildBuses(
         key,
         role: 'bass',
         voice: ev.voice,
-        gain: ev.voice === 'sub808' ? 0.78 : 0.62,
+        gain: preset.mix.bass,
         pan: 0,
-        reverbSend: 0.03,
+        // ベースは前に出したいのでほぼドライ。それでもジャンルの空間には少しだけ乗せる
+        reverbSend: 0.06 * preset.reverb.mix * SEND_SCALE,
         delaySend: 0,
-        ...VOICE_FX[ev.voice],
+        drive: preset.mix.bassDrive,
       });
     } else {
       buses.set(key, {
@@ -257,8 +272,8 @@ function buildBuses(
         voice: ev.voice,
         gain: 0.25,
         pan: ev.pan ?? 0,
-        reverbSend: 0.25 * preset.reverb.mix,
-        delaySend: 0.1 * preset.delay.mix,
+        reverbSend: 0.25 * preset.reverb.mix * SEND_SCALE,
+        delaySend: 0.1 * preset.delay.mix * SEND_SCALE,
         ...VOICE_FX[ev.voice],
       });
     }

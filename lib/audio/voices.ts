@@ -48,14 +48,49 @@ function cents(c: number): number {
 /** カットオフを動かすフィルタの係数更新間隔（毎サンプル tan() を呼ぶと重い） */
 const COEF_INTERVAL = 16;
 
+/**
+ * 音源レベルの校正表。
+ *
+ * ここの数値は勘ではなく実測で決めている。各ボイスを vel=1 で 1 音鳴らし、
+ * **有音程の音色は RMS が 0.10、打楽器はピークが 1.0** に揃うよう合わせた。
+ *
+ * こうしておくと「音色そのものの音量」と「ミックスのフェーダー」が分離される。
+ * 以前はベースの音色だけが他より 10dB 以上大きく、その上でバスゲインも最大だったため、
+ * どちらを触ればバランスが直るのか分からない状態だった。
+ * いまは音量バランスは lib/music/genres.ts のゲインだけで決まる。
+ *
+ * 再計測するときは、各ボイスを vel=1・55Hz（低音系）/ 440Hz（その他）で鳴らして
+ * RMS とピークを測り、目標値との比をここに掛ける。
+ */
+const LEVEL = {
+  kick: 0.92,
+  snareNoise: 1.4,
+  snareBody: 0.75,
+  clapTail: 2.78,
+  clapBurst: 1.79,
+  hat: 1.02,
+  tom: 1.03,
+  ride: 0.55,
+  bass: 0.194,
+  sub808: 0.25,
+  epiano: 0.45,
+  piano: 0.56,
+  pad: 0.56,
+  strings: 0.61,
+  pluck: 0.63,
+  lead: 0.26,
+  guitar: 0.54,
+  bell: 0.5,
+} as const;
+
 // ---------------------------------------------------------------- ドラム
 
 const kick: VoiceRenderer = (out, ev, vc) => {
   const sr = vc.sampleRate;
   const n = Math.min(out.length, Perc.totalSamples(0.002, 0.45, sr));
-  const env = new Perc(ev.vel, 0.002, 0.45, sr);
+  const env = new Perc(ev.vel * LEVEL.kick, 0.002, 0.45, sr);
   const clickLen = Math.floor(0.005 * sr);
-  const clickEnv = new Perc(ev.vel * 0.3, 0.0005, 0.012, sr);
+  const clickEnv = new Perc(ev.vel * LEVEL.kick * 0.3, 0.0005, 0.012, sr);
   const hp = new OnePoleHigh(1200, sr);
 
   // 140Hz から 46Hz へ一気に落として「ドン」を作る
@@ -77,8 +112,8 @@ const kick: VoiceRenderer = (out, ev, vc) => {
 const snare: VoiceRenderer = (out, ev, vc) => {
   const sr = vc.sampleRate;
   const n = Math.min(out.length, Perc.totalSamples(0.001, 0.2, sr));
-  const noiseEnv = new Perc(ev.vel * 0.75, 0.001, 0.17, sr);
-  const bodyEnv = new Perc(ev.vel * 0.4, 0.001, 0.09, sr);
+  const noiseEnv = new Perc(ev.vel * LEVEL.snareNoise, 0.001, 0.17, sr);
+  const bodyEnv = new Perc(ev.vel * LEVEL.snareBody, 0.001, 0.09, sr);
   const band = new Svf(sr, 1800, 0.9);
   const hp = new OnePoleHigh(260, sr);
 
@@ -104,7 +139,7 @@ const clap: VoiceRenderer = (out, ev, vc) => {
   // 短いノイズを 4 連射して、手拍子の重なりを作る
   const bursts = [0, 0.009, 0.017, 0.024].map((off, i) => ({
     start: Math.floor(off * sr),
-    env: new Perc(ev.vel * (i === 3 ? 0.7 : 0.45), 0.0005, i === 3 ? 0.13 : 0.012, sr),
+    env: new Perc(ev.vel * (i === 3 ? LEVEL.clapTail : LEVEL.clapBurst), 0.0005, i === 3 ? 0.13 : 0.012, sr),
   }));
 
   for (let i = 0; i < n; i++) {
@@ -120,7 +155,7 @@ function hat(decay: number): VoiceRenderer {
   return (out, ev, vc) => {
     const sr = vc.sampleRate;
     const n = Math.min(out.length, Perc.totalSamples(0.001, decay, sr));
-    const env = new Perc(ev.vel * 0.5, 0.001, decay, sr);
+    const env = new Perc(ev.vel * LEVEL.hat, 0.001, decay, sr);
     const hp = new OnePoleHigh(7000, sr);
     const band = new Svf(sr, 10500, 1.4);
 
@@ -136,8 +171,8 @@ const tom: VoiceRenderer = (out, ev, vc) => {
   const sr = vc.sampleRate;
   const n = Math.min(out.length, Perc.totalSamples(0.002, 0.32, sr));
   const base = Math.max(60, ev.freq || 140);
-  const env = new Perc(ev.vel * 0.85, 0.002, 0.32, sr);
-  const noiseEnv = new Perc(ev.vel * 0.12, 0.001, 0.05, sr);
+  const env = new Perc(ev.vel * LEVEL.tom, 0.002, 0.32, sr);
+  const noiseEnv = new Perc(ev.vel * LEVEL.tom * 0.14, 0.001, 0.05, sr);
   const lp = new OnePole(2000, sr);
   const pitchK = Math.exp(-1 / (0.05 * sr));
   let pitch = 1;
@@ -155,7 +190,7 @@ const tom: VoiceRenderer = (out, ev, vc) => {
 const ride: VoiceRenderer = (out, ev, vc) => {
   const sr = vc.sampleRate;
   const n = Math.min(out.length, Perc.totalSamples(0.002, 0.85, sr));
-  const env = new Perc(ev.vel * 0.34, 0.002, 0.85, sr);
+  const env = new Perc(ev.vel * LEVEL.ride, 0.002, 0.85, sr);
   const hp = new OnePoleHigh(5000, sr);
   const ratios = [1, 1.47, 2.13];
   const incs = ratios.map((r) => (3200 * r) / sr);
@@ -179,8 +214,9 @@ const BASS_ADSR: AdsrSpec = { attack: 0.006, decay: 0.14, sustain: 0.75, release
 const bass: VoiceRenderer = (out, ev, vc) => {
   const sr = vc.sampleRate;
   const n = Math.min(out.length, Adsr.totalSamples(BASS_ADSR, ev.dur, sr));
-  const env = new Adsr(BASS_ADSR, ev.vel * 0.75, ev.dur, sr);
-  const lp = new Svf(sr, 90, 3.5);
+  const env = new Adsr(BASS_ADSR, ev.vel * LEVEL.bass, ev.dur, sr);
+  // Q を上げすぎると基音そのものが共振で持ち上がり、ベースだけが突出する
+  const lp = new Svf(sr, 90, 1.8);
 
   // カットオフを一気に開いてから閉じることで、指で弾いたような立ち上がりになる
   const peakCut = 700 + vc.spec.brightness * 1400;
@@ -197,7 +233,7 @@ const bass: VoiceRenderer = (out, ev, vc) => {
     if (i % COEF_INTERVAL === 0) {
       const open = i < openSamples ? i / openSamples : 1;
       if (i >= openSamples) closing *= Math.pow(closeK, COEF_INTERVAL);
-      lp.set(90 + (peakCut - 90) * open * (0.4 + 0.6 * closing), 3.5);
+      lp.set(90 + (peakCut - 90) * open * (0.4 + 0.6 * closing), 1.8);
     }
     phase = wrap(phase + inc);
     subPhase = wrap(subPhase + subInc);
@@ -212,7 +248,7 @@ const SUB_ADSR: AdsrSpec = { attack: 0.004, decay: 0.5, sustain: 0.6, release: 0
 const sub808: VoiceRenderer = (out, ev, vc) => {
   const sr = vc.sampleRate;
   const n = Math.min(out.length, Adsr.totalSamples(SUB_ADSR, ev.dur, sr));
-  const env = new Adsr(SUB_ADSR, ev.vel * 0.9, ev.dur, sr);
+  const env = new Adsr(SUB_ADSR, ev.vel * LEVEL.sub808, ev.dur, sr);
 
   // glideFrom があれば、その音程から滑り込む
   let freq = ev.glideFrom ?? ev.freq;
@@ -234,7 +270,7 @@ const EPIANO_ADSR: AdsrSpec = { attack: 0.006, decay: 1.0, sustain: 0.28, releas
 const epiano: VoiceRenderer = (out, ev, vc) => {
   const sr = vc.sampleRate;
   const n = Math.min(out.length, Adsr.totalSamples(EPIANO_ADSR, ev.dur, sr));
-  const env = new Adsr(EPIANO_ADSR, ev.vel * 0.5, ev.dur, sr);
+  const env = new Adsr(EPIANO_ADSR, ev.vel * LEVEL.epiano, ev.dur, sr);
   const lp = new Svf(sr, 2200 + vc.spec.brightness * 2600, 0.7);
 
   // FM：高い周波数のモジュレーターでキャリアの周波数を揺らす。
@@ -246,7 +282,7 @@ const epiano: VoiceRenderer = (out, ev, vc) => {
   let modPhase = 0;
   let carrierPhase = 0;
   let bellPhase = 0;
-  const bellEnv = new Perc(ev.vel * 0.12, 0.002, 0.09, sr);
+  const bellEnv = new Perc(ev.vel * LEVEL.epiano * 0.24, 0.002, 0.09, sr);
   const tremInc = 4.5 / sr;
   let tremPhase = 0;
 
@@ -271,7 +307,7 @@ const piano: VoiceRenderer = (out, ev, vc) => {
   const decay = 1.4 + Math.max(0, (72 - midi) / 12) * 0.5;
   const spec: AdsrSpec = { attack: 0.004, decay, sustain: 0.16, release: 0.4 };
   const n = Math.min(out.length, Adsr.totalSamples(spec, ev.dur, sr));
-  const env = new Adsr(spec, ev.vel * 0.5, ev.dur, sr);
+  const env = new Adsr(spec, ev.vel * LEVEL.piano, ev.dur, sr);
   const lp = new Svf(sr, 5200, 0.7);
   const cutK = Math.exp(-1 / (decay * sr));
   let cut = 1;
@@ -299,7 +335,7 @@ const pad: VoiceRenderer = (out, ev, vc) => {
   const attack = 0.35 + (1 - vc.spec.energy) * 0.5;
   const spec: AdsrSpec = { attack, decay: 0.6, sustain: 0.85, release: 1.6 };
   const n = Math.min(out.length, Adsr.totalSamples(spec, ev.dur, sr));
-  const env = new Adsr(spec, ev.vel * 0.42, ev.dur, sr);
+  const env = new Adsr(spec, ev.vel * LEVEL.pad, ev.dur, sr);
   const lp = new Svf(sr, 400, 1.2);
 
   const openTo = 1200 + vc.spec.brightness * 2600;
@@ -332,7 +368,7 @@ const STRINGS_ADSR: AdsrSpec = { attack: 0.22, decay: 0.4, sustain: 0.85, releas
 const strings: VoiceRenderer = (out, ev, vc) => {
   const sr = vc.sampleRate;
   const n = Math.min(out.length, Adsr.totalSamples(STRINGS_ADSR, ev.dur, sr));
-  const env = new Adsr(STRINGS_ADSR, ev.vel * 0.42, ev.dur, sr);
+  const env = new Adsr(STRINGS_ADSR, ev.vel * LEVEL.strings, ev.dur, sr);
   const hp = new OnePoleHigh(150, sr);
   const lp = new Svf(sr, 2200 + vc.spec.brightness * 1800, 0.7);
 
@@ -362,7 +398,7 @@ const pluck: VoiceRenderer = (out, ev, vc) => {
   const sr = vc.sampleRate;
   const decay = Math.min(0.5, Math.max(0.14, ev.dur * 0.8));
   const n = Math.min(out.length, Perc.totalSamples(0.003, decay, sr));
-  const env = new Perc(ev.vel * 0.45, 0.003, decay, sr);
+  const env = new Perc(ev.vel * LEVEL.pluck, 0.003, decay, sr);
   const openCut = 2800 + vc.spec.brightness * 2400;
   const lp = new Svf(sr, 420 + openCut, 4);
   const cutK = Math.exp(-1 / (decay * 0.5 * sr));
@@ -391,7 +427,7 @@ const LEAD_ADSR: AdsrSpec = { attack: 0.012, decay: 0.2, sustain: 0.7, release: 
 const lead: VoiceRenderer = (out, ev, vc) => {
   const sr = vc.sampleRate;
   const n = Math.min(out.length, Adsr.totalSamples(LEAD_ADSR, ev.dur, sr));
-  const env = new Adsr(LEAD_ADSR, ev.vel * 0.34, ev.dur, sr);
+  const env = new Adsr(LEAD_ADSR, ev.vel * LEVEL.lead, ev.dur, sr);
   const lp = new Svf(sr, 1200, 1.4);
   const openSamples = Math.max(1, Math.floor(0.12 * sr));
   const openTo = 3600 + vc.spec.brightness * 3600;
@@ -428,7 +464,7 @@ const GUITAR_ADSR: AdsrSpec = { attack: 0.005, decay: 0.24, sustain: 0.6, releas
 const guitar: VoiceRenderer = (out, ev, vc) => {
   const sr = vc.sampleRate;
   const n = Math.min(out.length, Adsr.totalSamples(GUITAR_ADSR, ev.dur, sr));
-  const env = new Adsr(GUITAR_ADSR, ev.vel * 0.34, ev.dur, sr);
+  const env = new Adsr(GUITAR_ADSR, ev.vel * LEVEL.guitar, ev.dur, sr);
   const band = new Svf(sr, 1100, 0.8);
   const lp = new OnePole(4600, sr);
 
@@ -450,7 +486,7 @@ const bell: VoiceRenderer = (out, ev, vc) => {
   const sr = vc.sampleRate;
   const decay = Math.max(0.6, Math.min(2.4, ev.dur * 2));
   const n = Math.min(out.length, Perc.totalSamples(0.004, decay, sr));
-  const env = new Perc(ev.vel * 0.3, 0.004, decay, sr);
+  const env = new Perc(ev.vel * LEVEL.bell, 0.004, decay, sr);
 
   // 非整数倍音を重ねると金属的な響きになる
   const ratios = [1, 2.76, 5.4];

@@ -39,6 +39,22 @@ export interface GenrePreset {
   parts: PartConfig[];
   reverb: { seconds: number; decay: number; mix: number };
   delay: { noteDiv: number; feedback: number; mix: number };
+  /**
+   * ジャンルごとの音量バランス。
+   *
+   * 音色そのものの音量は lib/audio/voices.ts で揃えてあるので、
+   * ここの数値がそのまま「ミキサーのフェーダー」になる。
+   * parts の gain と同じ土俵で比べられる（例: bass 0.54 と lead 0.50 なら
+   * ベースが旋律より少しだけ大きい）。
+   */
+  mix: {
+    /** ベースのバスゲイン */
+    bass: number;
+    /** ベースに掛けるサチュレーション量（音量は変えず、波形だけ丸める） */
+    bassDrive: number;
+    /** ドラム全体に掛ける倍率 */
+    drums: number;
+  };
   /** 0..1 キックに合わせたダッキングの深さ */
   sidechain: number;
   master: { lowpass?: number; highpass?: number; drive?: number };
@@ -83,12 +99,13 @@ export const GENRE_PRESETS: Record<GenreId, GenrePreset> = {
     sectionTemplate: ['intro', 'verse', 'chorus', 'verse', 'chorus', 'bridge', 'chorus', 'outro'],
     drumPatterns: ['boombap', 'laidback'],
     parts: [
-      { role: 'harmony', voice: 'epiano', gain: 0.5, pan: -0.12, octave: 4, density: 0.45, reverbSend: 0.26, delaySend: 0.14, minEnergy: 0.0, style: 'broken' },
-      { role: 'texture', voice: 'pad', gain: 0.22, pan: 0.15, octave: 3, density: 0.2, reverbSend: 0.45, delaySend: 0.08, minEnergy: 0.2, style: 'sustain' },
-      { role: 'lead', voice: 'bell', gain: 0.24, pan: 0.2, octave: 5, density: 0.4, reverbSend: 0.35, delaySend: 0.3, minEnergy: 0.55 },
+      { role: 'harmony', voice: 'epiano', gain: 0.4, pan: -0.12, octave: 4, density: 0.45, reverbSend: 0.26, delaySend: 0.14, minEnergy: 0.0, style: 'broken' },
+      { role: 'texture', voice: 'pad', gain: 0.26, pan: 0.15, octave: 3, density: 0.2, reverbSend: 0.45, delaySend: 0.08, minEnergy: 0.2, style: 'sustain' },
+      { role: 'lead', voice: 'bell', gain: 0.52, pan: 0.2, octave: 5, density: 0.4, reverbSend: 0.35, delaySend: 0.3, minEnergy: 0.55 },
     ],
     reverb: { seconds: 2.2, decay: 2.6, mix: 0.3 },
     delay: { noteDiv: 0.75, feedback: 0.32, mix: 0.22 },
+    mix: { bass: 0.58, bassDrive: 0.3, drums: 0.95 },
     sidechain: 0.12,
     master: { lowpass: 7200, drive: 0.15 },
     humanize: 0.9,
@@ -127,13 +144,14 @@ export const GENRE_PRESETS: Record<GenreId, GenrePreset> = {
     sectionTemplate: ['intro', 'verse', 'prechorus', 'chorus', 'verse', 'prechorus', 'chorus', 'bridge', 'chorus', 'outro'],
     drumPatterns: ['citypop16', 'discoFour'],
     parts: [
-      { role: 'harmony', voice: 'epiano', gain: 0.42, pan: -0.2, octave: 4, density: 0.55, reverbSend: 0.22, delaySend: 0.18, minEnergy: 0.0, style: 'stab' },
-      { role: 'arp', voice: 'pluck', gain: 0.26, pan: 0.32, octave: 5, density: 0.75, reverbSend: 0.2, delaySend: 0.35, minEnergy: 0.35, style: 'arpUpDown' },
-      { role: 'texture', voice: 'strings', gain: 0.2, pan: 0.1, octave: 4, density: 0.2, reverbSend: 0.4, delaySend: 0.05, minEnergy: 0.6, style: 'sustain' },
-      { role: 'lead', voice: 'lead', gain: 0.24, pan: 0.0, octave: 5, density: 0.55, reverbSend: 0.24, delaySend: 0.26, minEnergy: 0.7 },
+      { role: 'harmony', voice: 'epiano', gain: 0.38, pan: -0.2, octave: 4, density: 0.55, reverbSend: 0.22, delaySend: 0.18, minEnergy: 0.0, style: 'stab' },
+      { role: 'arp', voice: 'pluck', gain: 0.3, pan: 0.32, octave: 5, density: 0.75, reverbSend: 0.2, delaySend: 0.35, minEnergy: 0.35, style: 'arpUpDown' },
+      { role: 'texture', voice: 'strings', gain: 0.24, pan: 0.1, octave: 4, density: 0.2, reverbSend: 0.4, delaySend: 0.05, minEnergy: 0.6, style: 'sustain' },
+      { role: 'lead', voice: 'lead', gain: 0.5, pan: 0.0, octave: 5, density: 0.55, reverbSend: 0.24, delaySend: 0.26, minEnergy: 0.7 },
     ],
     reverb: { seconds: 2.0, decay: 2.2, mix: 0.24 },
     delay: { noteDiv: 0.75, feedback: 0.3, mix: 0.2 },
+    mix: { bass: 0.54, bassDrive: 0.22, drums: 1 },
     sidechain: 0.15,
     master: { highpass: 28, drive: 0.1 },
     humanize: 0.35,
@@ -170,12 +188,13 @@ export const GENRE_PRESETS: Record<GenreId, GenrePreset> = {
     sectionTemplate: ['intro', 'verse', 'prechorus', 'chorus', 'break', 'verse', 'prechorus', 'chorus', 'outro'],
     drumPatterns: ['fourOnFloor', 'houseShuffle'],
     parts: [
-      { role: 'harmony', voice: 'pad', gain: 0.32, pan: 0.0, octave: 4, density: 0.25, reverbSend: 0.38, delaySend: 0.1, minEnergy: 0.0, style: 'sustain' },
-      { role: 'arp', voice: 'pluck', gain: 0.3, pan: -0.25, octave: 5, density: 0.85, reverbSend: 0.2, delaySend: 0.3, minEnergy: 0.3, style: 'arpUp' },
-      { role: 'lead', voice: 'lead', gain: 0.3, pan: 0.0, octave: 5, density: 0.6, reverbSend: 0.22, delaySend: 0.24, minEnergy: 0.72 },
+      { role: 'harmony', voice: 'pad', gain: 0.34, pan: 0.0, octave: 4, density: 0.25, reverbSend: 0.38, delaySend: 0.1, minEnergy: 0.0, style: 'sustain' },
+      { role: 'arp', voice: 'pluck', gain: 0.34, pan: -0.25, octave: 5, density: 0.85, reverbSend: 0.2, delaySend: 0.3, minEnergy: 0.3, style: 'arpUp' },
+      { role: 'lead', voice: 'lead', gain: 0.54, pan: 0.0, octave: 5, density: 0.6, reverbSend: 0.22, delaySend: 0.24, minEnergy: 0.72 },
     ],
     reverb: { seconds: 2.4, decay: 2.0, mix: 0.26 },
     delay: { noteDiv: 0.5, feedback: 0.34, mix: 0.2 },
+    mix: { bass: 0.62, bassDrive: 0.3, drums: 1.1 },
     sidechain: 0.75,
     master: { highpass: 30, drive: 0.2 },
     humanize: 0.06,
@@ -213,13 +232,14 @@ export const GENRE_PRESETS: Record<GenreId, GenrePreset> = {
     sectionTemplate: ['intro', 'verse', 'chorus', 'verse', 'chorus', 'bridge', 'chorus', 'outro'],
     drumPatterns: ['rock8', 'halfTimeRock'],
     parts: [
-      { role: 'harmony', voice: 'guitar', gain: 0.3, pan: -0.42, octave: 3, density: 0.65, reverbSend: 0.14, delaySend: 0.06, minEnergy: 0.25, style: 'power' },
-      { role: 'texture', voice: 'guitar', gain: 0.24, pan: 0.42, octave: 3, density: 0.65, reverbSend: 0.14, delaySend: 0.06, minEnergy: 0.45, style: 'power' },
-      { role: 'arp', voice: 'piano', gain: 0.18, pan: 0.12, octave: 4, density: 0.4, reverbSend: 0.2, delaySend: 0.05, minEnergy: 0.0, style: 'broken' },
-      { role: 'lead', voice: 'lead', gain: 0.26, pan: 0.0, octave: 5, density: 0.6, reverbSend: 0.2, delaySend: 0.18, minEnergy: 0.7 },
+      { role: 'harmony', voice: 'guitar', gain: 0.42, pan: -0.42, octave: 3, density: 0.65, reverbSend: 0.14, delaySend: 0.06, minEnergy: 0.25, style: 'power' },
+      { role: 'texture', voice: 'guitar', gain: 0.34, pan: 0.42, octave: 3, density: 0.65, reverbSend: 0.14, delaySend: 0.06, minEnergy: 0.45, style: 'power' },
+      { role: 'arp', voice: 'piano', gain: 0.24, pan: 0.12, octave: 4, density: 0.4, reverbSend: 0.2, delaySend: 0.05, minEnergy: 0.0, style: 'broken' },
+      { role: 'lead', voice: 'lead', gain: 0.5, pan: 0.0, octave: 5, density: 0.6, reverbSend: 0.2, delaySend: 0.18, minEnergy: 0.7 },
     ],
     reverb: { seconds: 1.5, decay: 2.4, mix: 0.16 },
     delay: { noteDiv: 0.5, feedback: 0.24, mix: 0.12 },
+    mix: { bass: 0.56, bassDrive: 0.35, drums: 1.05 },
     sidechain: 0.0,
     master: { highpass: 35, drive: 0.35 },
     humanize: 0.45,
@@ -258,13 +278,14 @@ export const GENRE_PRESETS: Record<GenreId, GenrePreset> = {
     sectionTemplate: ['intro', 'verse', 'chorus', 'verse', 'chorus', 'outro'],
     drumPatterns: ['sparse'],
     parts: [
-      { role: 'harmony', voice: 'pad', gain: 0.4, pan: -0.1, octave: 3, density: 0.15, reverbSend: 0.62, delaySend: 0.14, minEnergy: 0.0, style: 'sustain' },
-      { role: 'texture', voice: 'strings', gain: 0.24, pan: 0.2, octave: 4, density: 0.15, reverbSend: 0.55, delaySend: 0.1, minEnergy: 0.3, style: 'sustain' },
-      { role: 'arp', voice: 'bell', gain: 0.2, pan: 0.3, octave: 5, density: 0.3, reverbSend: 0.6, delaySend: 0.4, minEnergy: 0.35, style: 'arpRandom' },
-      { role: 'lead', voice: 'piano', gain: 0.22, pan: -0.15, octave: 5, density: 0.3, reverbSend: 0.55, delaySend: 0.3, minEnergy: 0.4 },
+      { role: 'harmony', voice: 'pad', gain: 0.44, pan: -0.1, octave: 3, density: 0.15, reverbSend: 0.62, delaySend: 0.14, minEnergy: 0.0, style: 'sustain' },
+      { role: 'texture', voice: 'strings', gain: 0.32, pan: 0.2, octave: 4, density: 0.15, reverbSend: 0.55, delaySend: 0.1, minEnergy: 0.3, style: 'sustain' },
+      { role: 'arp', voice: 'bell', gain: 0.28, pan: 0.3, octave: 5, density: 0.3, reverbSend: 0.6, delaySend: 0.4, minEnergy: 0.35, style: 'arpRandom' },
+      { role: 'lead', voice: 'piano', gain: 0.4, pan: -0.15, octave: 5, density: 0.3, reverbSend: 0.55, delaySend: 0.3, minEnergy: 0.4 },
     ],
     reverb: { seconds: 5.5, decay: 1.6, mix: 0.6 },
     delay: { noteDiv: 1.0, feedback: 0.42, mix: 0.3 },
+    mix: { bass: 0.46, bassDrive: 0.15, drums: 0.7 },
     sidechain: 0.0,
     master: { lowpass: 9000 },
     humanize: 0.5,
@@ -303,12 +324,13 @@ export const GENRE_PRESETS: Record<GenreId, GenrePreset> = {
     sectionTemplate: ['intro', 'verse', 'chorus', 'verse', 'chorus', 'bridge', 'chorus', 'outro'],
     drumPatterns: ['swingRide', 'bossa'],
     parts: [
-      { role: 'harmony', voice: 'piano', gain: 0.36, pan: -0.18, octave: 4, density: 0.5, reverbSend: 0.24, delaySend: 0.04, minEnergy: 0.0, style: 'stab' },
-      { role: 'texture', voice: 'epiano', gain: 0.16, pan: 0.22, octave: 4, density: 0.3, reverbSend: 0.28, delaySend: 0.05, minEnergy: 0.5, style: 'sustain' },
-      { role: 'lead', voice: 'piano', gain: 0.3, pan: 0.08, octave: 5, density: 0.7, reverbSend: 0.22, delaySend: 0.06, minEnergy: 0.35 },
+      { role: 'harmony', voice: 'piano', gain: 0.4, pan: -0.18, octave: 4, density: 0.5, reverbSend: 0.24, delaySend: 0.04, minEnergy: 0.0, style: 'stab' },
+      { role: 'texture', voice: 'epiano', gain: 0.24, pan: 0.22, octave: 4, density: 0.3, reverbSend: 0.28, delaySend: 0.05, minEnergy: 0.5, style: 'sustain' },
+      { role: 'lead', voice: 'piano', gain: 0.46, pan: 0.08, octave: 5, density: 0.7, reverbSend: 0.22, delaySend: 0.06, minEnergy: 0.35 },
     ],
     reverb: { seconds: 1.8, decay: 2.4, mix: 0.2 },
     delay: { noteDiv: 0.5, feedback: 0.18, mix: 0.06 },
+    mix: { bass: 0.56, bassDrive: 0.12, drums: 0.85 },
     sidechain: 0.0,
     master: { highpass: 32 },
     humanize: 0.85,
@@ -346,12 +368,13 @@ export const GENRE_PRESETS: Record<GenreId, GenrePreset> = {
     sectionTemplate: ['intro', 'verse', 'chorus', 'verse', 'chorus', 'break', 'chorus', 'outro'],
     drumPatterns: ['trapRoll', 'trapSparse'],
     parts: [
-      { role: 'harmony', voice: 'pad', gain: 0.24, pan: 0.0, octave: 4, density: 0.2, reverbSend: 0.42, delaySend: 0.1, minEnergy: 0.0, style: 'sustain' },
-      { role: 'arp', voice: 'bell', gain: 0.26, pan: 0.24, octave: 5, density: 0.55, reverbSend: 0.34, delaySend: 0.36, minEnergy: 0.25, style: 'arpUpDown' },
-      { role: 'lead', voice: 'pluck', gain: 0.24, pan: -0.18, octave: 5, density: 0.5, reverbSend: 0.28, delaySend: 0.3, minEnergy: 0.6 },
+      { role: 'harmony', voice: 'pad', gain: 0.32, pan: 0.0, octave: 4, density: 0.2, reverbSend: 0.42, delaySend: 0.1, minEnergy: 0.0, style: 'sustain' },
+      { role: 'arp', voice: 'bell', gain: 0.34, pan: 0.24, octave: 5, density: 0.55, reverbSend: 0.34, delaySend: 0.36, minEnergy: 0.25, style: 'arpUpDown' },
+      { role: 'lead', voice: 'pluck', gain: 0.46, pan: -0.18, octave: 5, density: 0.5, reverbSend: 0.28, delaySend: 0.3, minEnergy: 0.6 },
     ],
     reverb: { seconds: 2.6, decay: 2.0, mix: 0.28 },
     delay: { noteDiv: 0.75, feedback: 0.36, mix: 0.2 },
+    mix: { bass: 0.7, bassDrive: 0.2, drums: 1.05 },
     sidechain: 0.4,
     master: { highpass: 24, drive: 0.25 },
     humanize: 0.2,
@@ -388,13 +411,14 @@ export const GENRE_PRESETS: Record<GenreId, GenrePreset> = {
     sectionTemplate: ['intro', 'verse', 'prechorus', 'chorus', 'break', 'verse', 'chorus', 'outro'],
     drumPatterns: ['epicTaiko', 'sparse'],
     parts: [
-      { role: 'harmony', voice: 'strings', gain: 0.36, pan: -0.16, octave: 3, density: 0.2, reverbSend: 0.5, delaySend: 0.06, minEnergy: 0.0, style: 'sustain' },
-      { role: 'texture', voice: 'pad', gain: 0.24, pan: 0.18, octave: 3, density: 0.15, reverbSend: 0.55, delaySend: 0.08, minEnergy: 0.2, style: 'sustain' },
-      { role: 'arp', voice: 'piano', gain: 0.24, pan: 0.1, octave: 4, density: 0.7, reverbSend: 0.4, delaySend: 0.12, minEnergy: 0.45, style: 'arpUp' },
-      { role: 'lead', voice: 'strings', gain: 0.3, pan: 0.0, octave: 5, density: 0.35, reverbSend: 0.45, delaySend: 0.1, minEnergy: 0.55 },
+      { role: 'harmony', voice: 'strings', gain: 0.4, pan: -0.16, octave: 3, density: 0.2, reverbSend: 0.5, delaySend: 0.06, minEnergy: 0.0, style: 'sustain' },
+      { role: 'texture', voice: 'pad', gain: 0.3, pan: 0.18, octave: 3, density: 0.15, reverbSend: 0.55, delaySend: 0.08, minEnergy: 0.2, style: 'sustain' },
+      { role: 'arp', voice: 'piano', gain: 0.3, pan: 0.1, octave: 4, density: 0.7, reverbSend: 0.4, delaySend: 0.12, minEnergy: 0.45, style: 'arpUp' },
+      { role: 'lead', voice: 'strings', gain: 0.48, pan: 0.0, octave: 5, density: 0.35, reverbSend: 0.45, delaySend: 0.1, minEnergy: 0.55 },
     ],
     reverb: { seconds: 4.0, decay: 1.8, mix: 0.45 },
     delay: { noteDiv: 0.5, feedback: 0.2, mix: 0.08 },
+    mix: { bass: 0.52, bassDrive: 0.18, drums: 0.9 },
     sidechain: 0.0,
     master: { highpass: 28, drive: 0.12 },
     humanize: 0.4,
