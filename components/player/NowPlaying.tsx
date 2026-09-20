@@ -8,13 +8,21 @@ import { formatSeed } from '@/lib/random';
 import { formatTime } from '@/lib/format';
 
 export function NowPlaying({ track }: { track: Track }) {
-  const preset = GENRE_PRESETS[track.spec.genre];
-  const facts = [
-    preset.labelJa,
-    `${track.spec.tempo} BPM`,
-    keyLabelJa(track.spec.key.root, track.spec.key.scale),
-    formatTime(track.durationSec),
-  ];
+  const spec = track.spec;
+  // AI で作った曲は BPM もキーもモデルから返らない。それらしい値を捏造せず、伏せる
+  const facts = spec
+    ? [
+        GENRE_PRESETS[spec.genre].labelJa,
+        `${spec.tempo} BPM`,
+        keyLabelJa(spec.key.root, spec.key.scale),
+        formatTime(track.durationSec),
+      ]
+    : [
+        GENRE_PRESETS[track.request.genre].labelJa,
+        'ElevenLabs Music',
+        formatTime(track.durationSec),
+      ];
+  const moods = spec ? spec.moods : track.request.moods;
 
   return (
     <div>
@@ -27,9 +35,9 @@ export function NowPlaying({ track }: { track: Track }) {
           </span>
         ))}
       </div>
-      {track.spec.moods.length > 0 && (
+      {moods.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {track.spec.moods.map((m) => (
+          {moods.map((m) => (
             <span
               key={m}
               className="rounded-full border border-ink-700 px-2 py-0.5 text-[11px] text-ink-300"
@@ -39,9 +47,11 @@ export function NowPlaying({ track }: { track: Track }) {
           ))}
         </div>
       )}
-      <div className="mt-2 font-mono text-[11px] tracking-wider text-ink-400">
-        seed #{formatSeed(track.spec.seed)}
-      </div>
+      {spec && (
+        <div className="mt-2 font-mono text-[11px] tracking-wider text-ink-400">
+          seed #{formatSeed(spec.seed)}
+        </div>
+      )}
     </div>
   );
 }

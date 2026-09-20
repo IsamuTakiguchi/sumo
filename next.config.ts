@@ -20,6 +20,9 @@ const nextConfig: NextConfig = {
   // 未設定ならルート配信。ローカル開発は従来どおり http://localhost:3000/ で動く
   ...(basePath ? { basePath, assetPrefix: basePath } : {}),
 
+  // 素の fetch には basePath が付かないので、クライアントからも読めるようにしておく
+  env: { NEXT_PUBLIC_BASE_PATH: basePath },
+
   // 静的ホスティングでディレクトリから index.html を引けるようにする
   trailingSlash: true,
 

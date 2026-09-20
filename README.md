@@ -1,17 +1,25 @@
 # sumo
 
-プロンプトとジャンルを選ぶと、**ブラウザの中だけで実際に鳴る楽曲を生成する** Suno 風の AI 音楽ジェネレーターです。
+プロンプトとジャンルを選ぶと楽曲を生成する Suno 風の AI 音楽ジェネレーターです。生成エンジンを 2 つから選べます。
 
-API キー・課金・ネットワーク接続はいりません。音楽理論のルール（スケール・コード進行・曲構成）で編曲し、自前のソフトシンセで波形まで書き出します。
+| | 内蔵シンセ | ElevenLabs Music |
+|---|---|---|
+| 音の作り方 | 音楽理論のルールで編曲し、自前のソフトシンセで合成 | 学習済みモデルが音声そのものを生成 |
+| 歌声 | 出せない（歌詞はテキストのみ） | **歌う**（歌詞を渡せばその通りに） |
+| 料金 | 無料 | 約 $0.15/分（60 秒でおよそ 22 円） |
+| ネットワーク | 不要。完全にオフライン | 必要。サーバー経由で API を叩く |
+| 同じ曲の再現 | シードで**波形まで一致** | できない（毎回違う曲になる） |
+
+内蔵シンセが既定で、API キーを設定した環境でだけ ElevenLabs が選べるようになります。
 
 ## できること
 
 - プロンプト（日本語）とジャンル・ムード・楽器タグから 30〜120 秒の楽曲を生成
 - 波形表示・シーク・音量調整つきのプレイヤーで再生
-- WAV でダウンロード
-- 生成履歴をこの端末に保存し、いつでも同じ音で聴き直し
-- シードを指定して、まったく同じ曲を再現
-- 歌詞（テキスト）の自動生成 ※ 歌声の合成は行いません
+- ダウンロード（内蔵シンセは WAV、ElevenLabs は MP3）
+- 生成履歴をこの端末に保存し、いつでも聴き直し
+- シードを指定して、まったく同じ曲を再現（内蔵シンセのみ）
+- 歌詞の自動生成。ElevenLabs では**その歌詞を実際に歌わせられます**
 
 対応ジャンルは ローファイ・ヒップホップ / シティポップ / EDM / ロック / アンビエント / ジャズ / トラップ / シネマティック の 8 種類です。
 
@@ -31,15 +39,52 @@ npm run lint       # ESLint
 npm run check      # 上記 3 つをまとめて実行
 ```
 
-## 公開する（GitHub Pages）
+## AI 生成（ElevenLabs Music）を使う
 
-サーバー機能を使っていないため、静的書き出しだけで公開できます。`main` に push すると
-`.github/workflows/deploy.yml` が走り、<https://isamutakiguchi.github.io/sumo/> に反映されます。
+**API キーはブラウザに置けません。** ElevenLabs 自身が禁じており、CORS でも弾かれます。
+そのため AI 生成にはサーバーが要ります。`app/api/music/route.ts` だけがキーを持ち、
+ブラウザからは合い言葉しか送りません。
 
-初回だけ、リポジトリの **Settings → Pages → Source** を「GitHub Actions」に変更してください。
-マージ前に試したいときは Actions タブから `Deploy to GitHub Pages` を手動実行できます。
+必要な環境変数は 3 つです（`.env.example` 参照）。
 
-手元で同じ成果物を確かめる:
+| 変数 | 内容 |
+|---|---|
+| `ELEVENLABS_API_KEY` | ElevenLabs の API キー。**サーバー専用**。`NEXT_PUBLIC_` を付けないこと |
+| `APP_PASSPHRASE` | AI 生成を使うための合い言葉。自分で決める |
+| `NEXT_PUBLIC_AI_PROVIDER_ENABLED` | `1` にすると UI に AI の選択肢が出る |
+
+`APP_PASSPHRASE` は飾りではありません。サイトは誰でも開けるので、これが無いと
+**見知らぬ人がサイト所有者の API キーで曲を作れてしまいます**。合い言葉が未設定の場合、
+サーバーは生成を通さず 503 を返します。尺の上限（120 秒）もサーバー側で強制しているので、
+クライアントを改造しても 10 分の曲は作れません。
+
+手元で試す:
+
+```bash
+cp .env.example .env.local   # 3 つを埋める
+npm run dev
+```
+
+## 公開する
+
+公開先は 2 つあります。用途が違うので両方残しています。
+
+### GitHub Pages — 内蔵シンセ専用の無料版
+
+`main` に push すると `.github/workflows/deploy.yml` が走り、
+<https://isamutakiguchi.github.io/sumo/> に反映されます。初回だけリポジトリの
+**Settings → Pages → Source** を「GitHub Actions」に変更してください。
+
+静的書き出し（`output: 'export'`）なので API ルートは含まれません。したがって
+このワークフローでは `NEXT_PUBLIC_AI_PROVIDER_ENABLED` を**設定しないでください**。
+設定すると UI に AI の選択肢が出て、選んでも 404 になります。
+
+### Vercel — AI 生成つきの版
+
+リポジトリをインポートするだけで動きます（設定ファイルは不要）。
+Settings → Environment Variables に上記 3 つを登録してください。
+
+手元で静的書き出しを確かめる:
 
 ```bash
 NEXT_OUTPUT=export npm run build   # out/ に書き出される
@@ -48,10 +93,6 @@ npx serve out                      # http://localhost:3000
 
 （`NEXT_BASE_PATH` を付けて書き出した `out/` はそのパス直下に置かないと参照が合いません。
 手元で確認するときは省略してください。）
-
-`NEXT_OUTPUT=export` を付けないかぎり通常のサーバービルドのままなので、あとから
-`app/api/generate/route.ts`（外部 API 用）を足しても設定を戻す必要はありません。
-別のパス直下に置くなら `NEXT_BASE_PATH` を変え、ドメイン直下なら省略します。
 
 ## 仕組み
 
@@ -102,26 +143,39 @@ Track                <audio> で再生し、ダウンロードもできる
 
 再生だけはブラウザに任せています。WAV の Blob を `<audio>` に渡すことで、シーク・一時停止・音量をブラウザ側の実装で賄え、ダウンロード用の Blob もそのまま使い回せます。
 
-## 外部 AI 音楽 API を使いたい場合
+## 別の AI 音楽 API に差し替える
 
-生成バックエンドは `MusicProvider` インターフェース（`lib/providers/types.ts`）で差し替えられます。内蔵シンセが既定の実装で、`lib/providers/remote.ts` が外部 API 用の雛形です。
+生成バックエンドは `MusicProvider` インターフェース（`lib/providers/types.ts`）で差し替えられます。
+`localSynth.ts` と `elevenlabs.ts` がその実装です。Replicate の MusicGen や Google Lyria など
+別のサービスを足すなら:
 
-Replicate の MusicGen や Stable Audio などを使うなら:
+1. `app/api/music/route.ts` を参考に、サーバー側で叩くルートを追加する
+   （キーはサーバーの環境変数に置き、クライアントへは渡さない）
+2. `MusicProvider` を実装して `lib/providers/index.ts` の `PROVIDERS` に登録する
+3. `supportsSeed: false` にしておくと、音声が自動で IndexedDB に保存されます
+   （作り直しでは同じ曲に戻らないバックエンド向けの扱いになります）
 
-1. `app/api/generate/route.ts` を追加し、サーバー側で API を叩く（キーはサーバーの環境変数に置き、クライアントへは渡さない）
-2. `lib/providers/remote.ts` の `generate()` を実装する
-3. `NEXT_PUBLIC_REMOTE_PROVIDER_ENABLED=1` を設定する
+### 保存のしかたが 2 通りある理由
+
+内蔵シンセの曲は生成条件だけを localStorage に持ち、開くときにシードから作り直します。
+60 秒ステレオの WAV は 10MB を超えて localStorage（約 5MB）には入りませんが、
+決定性があるので作り直せば同じ音が返るからです。
+
+AI で作った曲はそうはいきません。**同じ指示でも毎回違う曲になり、作り直すたびに課金されます。**
+音声を捨てたら曲そのものが失われるので、こちらだけ実体を IndexedDB に残しています
+（`lib/storage/audioStore.ts`）。ライブラリから溢れた曲の音声は自動で掃除されます。
 
 ## 構成
 
 ```
 app/          Next.js App Router（ページはサーバーコンポーネント、中身はクライアント）
+  api/music/  ElevenLabs を叩く唯一の場所。API キーはここから外に出ない
 components/   UI（作成パネル / プレイヤー / ライブラリ）
 lib/
   music/      編曲（音に触らない純粋なロジック）
   audio/      合成・ミックス・WAV 書き出し
   providers/  生成バックエンドの抽象化
-  storage/    localStorage への履歴保存とメモリキャッシュ
+  storage/    履歴（localStorage）と音声（メモリ + IndexedDB）
   hooks/      React フック
 ```
 

@@ -210,7 +210,12 @@ export interface TrackMeta {
   title: string;
   createdAt: number;
   request: GenerationRequest;
-  spec: ResolvedSpec;
+  /**
+   * 内蔵シンセが解決した楽曲パラメータ。
+   * 外部 AI で作った曲は BPM もキーもシードもモデルから返らないので null になる。
+   * 存在しない値をそれらしく埋めると UI が嘘の BPM を出すため、あえて null を許している。
+   */
+  spec: ResolvedSpec | null;
   durationSec: number;
   sections: SectionSummary[];
   lyrics: string | null;
@@ -219,7 +224,7 @@ export interface TrackMeta {
 
 /** 実行時のトラック。音声を保持するので永続化はされない */
 export interface Track extends TrackMeta {
-  /** WAV に変換済みの Blob。<audio> と ダウンロードの両方で使う */
+  /** 音声本体。<audio> と ダウンロードの両方で使う（内蔵シンセは WAV、外部 AI は MP3） */
   blob: Blob;
   /** blob の Object URL */
   url: string;

@@ -14,6 +14,7 @@ import { composeArrangement } from '@/lib/music/arrange';
 import { bufferRms, renderArrangement } from '@/lib/audio/render';
 import { computePeaks } from '@/lib/audio/peaks';
 import { encodeWavBlob } from '@/lib/audio/wav';
+import { createTrackId } from './ids';
 import { STAGE_MESSAGES, type GenerateOptions, type MusicProvider } from './types';
 
 export const LOCAL_SYNTH_ID = 'local-synth';
@@ -21,13 +22,6 @@ export const LOCAL_SYNTH_ID = 'local-synth';
 /** 無音に近い曲が出てしまったときに、シードをずらして作り直す回数 */
 const MAX_RETRY = 1;
 const SILENCE_RMS = 0.002;
-
-function createId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `t_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e9).toString(36)}`;
-}
 
 export const localSynthProvider: MusicProvider = {
   id: LOCAL_SYNTH_ID,
@@ -89,7 +83,7 @@ export const localSynthProvider: MusicProvider = {
     report('done', 1);
 
     return {
-      id: createId(),
+      id: createTrackId(),
       title: arrangement.title,
       createdAt: Date.now(),
       request: { ...req, seed },
